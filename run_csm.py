@@ -112,6 +112,41 @@ def main():
         generator.sample_rate
     )
     print("Successfully generated full_conversation.wav")
+def generate_conversation(conversation_list, user_name=""):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    generator = load_csm_1b(device)
+
+    prompt_a = prepare_prompt(
+        SPEAKER_PROMPTS["conversational_a"]["text"],
+        0,
+        SPEAKER_PROMPTS["conversational_a"]["audio"],
+        generator.sample_rate
+    )
+    prompt_b = prepare_prompt(
+        SPEAKER_PROMPTS["conversational_b"]["text"],
+        1,
+        SPEAKER_PROMPTS["conversational_b"]["audio"],
+        generator.sample_rate
+    )
+
+    generated_segments = []
+    prompt_segments = [prompt_a, prompt_b]
+
+    for utterance in conversation_list:
+        # On remplace {user_name} dans le texte si présent
+        utterance_text = utterance['text'].replace("{user_name}", user_name)
+        audio_tensor = generator.generate(
+            text=utterance_text,
+            speaker=utterance['speaker_id'],
+            context=prompt_segments + generated_segments,
+            max_audio_length_ms=10_000,
+        )
+        generated_segments.append(Segment(text=utterance_text, speaker=utterance['speaker_id'], audio=audio_tensor))
+
+    all_audio = torch.cat([seg.audio for seg in generated_segments], dim=0)
+    output_path = "full_conversation.wav"
+    torchaudio.save(output_path, all_audio.unsqueeze(0).cpu(), generator.sample_rate)
+    return output_path
 
 if __name__ == "__main__":
     main() 
